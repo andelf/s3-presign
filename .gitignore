@@ -8,3 +8,4 @@ yarn-error.log
 trash/
 
 .yarn/install-state.gz
+Cargo.lock
