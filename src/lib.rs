@@ -57,6 +57,7 @@ impl Credentials {
 }
 
 /// S3 Bucket
+#[derive(Debug, Clone)]
 pub struct Bucket {
     /// AWS_DEFAULT_REGION, AWS_REGION
     region: String,
@@ -66,17 +67,23 @@ pub struct Bucket {
 }
 
 impl Bucket {
-    pub fn new(region: &str, bucket: &str, root: &str = "s3.amazonaws.com") -> Self {
+    pub fn new(region: &str, bucket: &str) -> Self {
         Self {
             region: region.into(),
             bucket: bucket.into(),
-            root: root,
+            root: "s3.amazonaws.com".into(),
         }
     }
-}
 
-impl From<&str> for Bucket {
-    fn from(s: &str, root: &str = "s3.amazonaws.com") -> Self {
+    pub fn new_with_root(region: &str, bucket: &str, root: &str) -> Self {
+        Self {
+            region: region.into(),
+            bucket: bucket.into(),
+            root: root.into(),
+        }
+    }
+
+    pub fn from_with_root(s: &str, root: &str) -> Self {
         if s.contains(":") {
             let mut parts = s.splitn(2, ':');
             let region = parts.next().unwrap();
@@ -84,14 +91,21 @@ impl From<&str> for Bucket {
             Self {
                 region: region.into(),
                 bucket: bucket.into(),
+                root: root.into(),
             }
         } else {
             Self {
                 region: "us-east-1".into(),
                 bucket: s.into(),
-                root: root,
+                root: root.into(),
             }
         }
+    }
+}
+
+impl From<&str> for Bucket {
+    fn from(s: &str) -> Self {
+        Bucket::from_with_root(s, "s3.amazonaws.com")
     }
 }
 
@@ -106,20 +120,30 @@ pub enum AddressingStyle {
 pub struct Presigner {
     credentials: Credentials,
     bucket: String,
+    root: String,
     region: String,
     endpoint: Url,
     addressing_style: AddressingStyle,
 }
 
 impl Presigner {
-    pub fn new(cred: Credentials, bucket: &Bucket, region: &str) -> Self {
+    pub fn new(cred: Credentials, bucket: &str, region: &str) -> Self {
+        Self::new_with_root(cred, bucket, region, "s3.amazonaws.com")
+    }
+
+    pub fn new_with_root(cred: Credentials, bucket: &str, region: &str, root: &str) -> Self {
         Self {
             credentials: cred,
             bucket: bucket.into(),
+            root: root.into(),
             region: region.into(),
-            endpoint: Url::parse(&format!("https://{}.{}", bucket.bucket, bucket.root)).unwrap(),
+            endpoint: Url::parse(&format!("https://{}.{}", bucket, root)).unwrap(),
             addressing_style: AddressingStyle::Virtual,
         }
+    }
+
+    pub fn from_bucket(credentials: Credentials, bucket: &Bucket) -> Self {
+        Self::new_with_root(credentials, bucket.bucket.as_str(), bucket.region.as_str(), bucket.root.as_str())
     }
 
     /// Set the endpoint to use for presigned URLs, also enables path style
@@ -473,6 +497,7 @@ mod tests {
         let bucket = Bucket {
             region: "us-east-1".into(),
             bucket: "the-bucket".into(),
+            root: "s3.amazonaws.com".into(),
         };
 
         let s = put(
