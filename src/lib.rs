@@ -61,19 +61,22 @@ pub struct Bucket {
     /// AWS_DEFAULT_REGION, AWS_REGION
     region: String,
     bucket: String,
+
+    root: String,
 }
 
 impl Bucket {
-    pub fn new(region: &str, bucket: &str) -> Self {
+    pub fn new(region: &str, bucket: &str, root: &str = "s3.amazonaws.com") -> Self {
         Self {
             region: region.into(),
             bucket: bucket.into(),
+            root: root,
         }
     }
 }
 
 impl From<&str> for Bucket {
-    fn from(s: &str) -> Self {
+    fn from(s: &str, root: &str = "s3.amazonaws.com") -> Self {
         if s.contains(":") {
             let mut parts = s.splitn(2, ':');
             let region = parts.next().unwrap();
@@ -86,6 +89,7 @@ impl From<&str> for Bucket {
             Self {
                 region: "us-east-1".into(),
                 bucket: s.into(),
+                root: root,
             }
         }
     }
@@ -108,12 +112,12 @@ pub struct Presigner {
 }
 
 impl Presigner {
-    pub fn new(cred: Credentials, bucket: &str, region: &str) -> Self {
+    pub fn new(cred: Credentials, bucket: &Bucket, region: &str) -> Self {
         Self {
             credentials: cred,
             bucket: bucket.into(),
             region: region.into(),
-            endpoint: Url::parse(&format!("https://{}.s3.amazonaws.com", bucket)).unwrap(),
+            endpoint: Url::parse(&format!("https://{}.{}", bucket.bucket, bucket.root)).unwrap(),
             addressing_style: AddressingStyle::Virtual,
         }
     }
@@ -130,8 +134,8 @@ impl Presigner {
 
     pub fn use_path_style(&mut self) -> &mut Self {
         self.addressing_style = AddressingStyle::Path;
-        if self.endpoint == Url::parse(&format!("https://{}.s3.amazonaws.com", self.bucket)).unwrap() {
-            self.endpoint = Url::parse(&format!("https://s3.amazonaws.com/{}", self.bucket)).unwrap();
+        if self.endpoint == Url::parse(&format!("https://{}.{}", self.bucket, self.root)).unwrap() {
+            self.endpoint = Url::parse(&format!("https://{}/{}", self.root, self.bucket)).unwrap();
         }
         self
     }
@@ -236,7 +240,7 @@ impl Presigner {
 
 /// Generate a presigned GET URL for downloading
 pub fn get(credentials: &Credentials, bucket: &Bucket, key: &str, expires: i64) -> Option<String> {
-    let url = format!("https://{}.s3.amazonaws.com/{}", bucket.bucket, escape_key(key));
+    let url = format!("https://{}.{}/{}", bucket.bucket, bucket.root, escape_key(key));
     let now = Utc::now();
 
     presigned_url(
@@ -254,7 +258,7 @@ pub fn get(credentials: &Credentials, bucket: &Bucket, key: &str, expires: i64) 
 
 /// Generate a presigned PUT URL for uploading
 pub fn put(credentials: &Credentials, bucket: &Bucket, key: &str, expires: i64) -> Option<String> {
-    let url = format!("https://{}.s3.amazonaws.com/{}", bucket.bucket, escape_key(key));
+    let url = format!("https://{}.{}/{}", bucket.bucket, bucket.root, escape_key(key));
     /*let url = format!(
         "https://s3.amazonaws.com/{}/{}",
         bucket.bucket,
