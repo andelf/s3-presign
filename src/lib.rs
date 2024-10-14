@@ -41,17 +41,17 @@ pub struct Credentials {
 impl Credentials {
     pub fn new(access_key: &str, secret_key: &str, session_token: Option<&str>) -> Self {
         Self {
-            access_key: access_key.into(),
-            secret_key: secret_key.into(),
-            session_token: session_token.map(|s| s.into()),
+            access_key: access_key.to_string(),
+            secret_key: secret_key.to_string(),
+            session_token: session_token.map(|s| s.to_string()),
         }
     }
 
     pub fn new_temporary(access_key: &str, secret_key: &str, session_token: &str) -> Self {
         Self {
-            access_key: access_key.into(),
-            secret_key: secret_key.into(),
-            session_token: Some(session_token.into()),
+            access_key: access_key.to_string(),
+            secret_key: secret_key.to_string(),
+            session_token: Some(session_token.to_string()),
         }
     }
 }
@@ -69,17 +69,17 @@ pub struct Bucket {
 impl Bucket {
     pub fn new(region: &str, bucket: &str) -> Self {
         Self {
-            region: region.into(),
-            bucket: bucket.into(),
-            root: "s3.amazonaws.com".into(),
+            region: region.to_string(),
+            bucket: bucket.to_string(),
+            root: "s3.amazonaws.com".to_string(),
         }
     }
 
     pub fn new_with_root(region: &str, bucket: &str, root: &str) -> Self {
         Self {
-            region: region.into(),
-            bucket: bucket.into(),
-            root: root.into(),
+            region: region.to_string(),
+            bucket: bucket.to_string(),
+            root: root.to_string(),
         }
     }
 
@@ -89,15 +89,15 @@ impl Bucket {
             let region = parts.next().unwrap();
             let bucket = parts.next().unwrap();
             Self {
-                region: region.into(),
-                bucket: bucket.into(),
-                root: root.into(),
+                region: region.to_string(),
+                bucket: bucket.to_string(),
+                root: root.to_string(),
             }
         } else {
             Self {
-                region: "us-east-1".into(),
-                bucket: s.into(),
-                root: root.into(),
+                region: "us-east-1".to_string(),
+                bucket: s.to_string(),
+                root: root.to_string(),
             }
         }
     }
@@ -134,9 +134,9 @@ impl Presigner {
     pub fn new_with_root(cred: Credentials, bucket: &str, region: &str, root: &str) -> Self {
         Self {
             credentials: cred,
-            bucket: bucket.into(),
-            root: root.into(),
-            region: region.into(),
+            bucket: bucket.to_string(),
+            root: root.to_string(),
+            region: region.to_string(),
             endpoint: Url::parse(&format!("https://{}.{}", bucket, root)).unwrap(),
             addressing_style: AddressingStyle::Virtual,
         }
@@ -328,7 +328,7 @@ fn escape_key(key: &str) -> String {
         }
     }
     if encoded {
-        key.into() // assume esacped
+        key.to_string() // assume esacped
     } else {
         percent_encode(key.as_bytes(), &S3_KEY_PERCENT_ENCODING_CHARSET).to_string()
     }
@@ -428,6 +428,7 @@ pub fn presigned_url(
         signed_headers,
         payload_hash
     );
+
     let string_to_sign = string_to_sign(&date_time, &region, &canonical_request, service);
     let signing_key = signing_key(&date_time, secret_key, region, service)?;
 
@@ -489,15 +490,15 @@ mod tests {
     #[test]
     fn test_generate() {
         let credentials = Credentials {
-            access_key: "ASIAAAAAABBBBBCCCCCDDDDDD".into(),
-            secret_key: "AAAAAAA+BBBBBBBB/CCCCCCC/DDDDDDDDDD".into(),
-            session_token: Some("xxxxxxxxx".into()),
+            access_key: "ASIAAAAAABBBBBCCCCCDDDDDD".to_string(),
+            secret_key: "AAAAAAA+BBBBBBBB/CCCCCCC/DDDDDDDDDD".to_string(),
+            session_token: Some("xxxxxxxxx".to_string()),
         };
 
         let bucket = Bucket {
-            region: "us-east-1".into(),
-            bucket: "the-bucket".into(),
-            root: "s3.amazonaws.com".into(),
+            region: "us-east-1".to_string(),
+            bucket: "the-bucket".to_string(),
+            root: "s3.amazonaws.com".to_string(),
         };
 
         let s = put(
