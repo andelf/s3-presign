@@ -9,3 +9,6 @@ trash/
 
 .yarn/install-state.gz
 Cargo.lock
+
+# IDEs
+.idea
