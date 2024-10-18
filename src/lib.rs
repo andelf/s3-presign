@@ -41,53 +41,71 @@ pub struct Credentials {
 impl Credentials {
     pub fn new(access_key: &str, secret_key: &str, session_token: Option<&str>) -> Self {
         Self {
-            access_key: access_key.into(),
-            secret_key: secret_key.into(),
-            session_token: session_token.map(|s| s.into()),
+            access_key: access_key.to_string(),
+            secret_key: secret_key.to_string(),
+            session_token: session_token.map(|s| s.to_string()),
         }
     }
 
     pub fn new_temporary(access_key: &str, secret_key: &str, session_token: &str) -> Self {
         Self {
-            access_key: access_key.into(),
-            secret_key: secret_key.into(),
-            session_token: Some(session_token.into()),
+            access_key: access_key.to_string(),
+            secret_key: secret_key.to_string(),
+            session_token: Some(session_token.to_string()),
         }
     }
 }
 
 /// S3 Bucket
+#[derive(Debug, Clone)]
 pub struct Bucket {
     /// AWS_DEFAULT_REGION, AWS_REGION
     region: String,
     bucket: String,
+
+    root: String,
 }
 
 impl Bucket {
     pub fn new(region: &str, bucket: &str) -> Self {
         Self {
-            region: region.into(),
-            bucket: bucket.into(),
+            region: region.to_string(),
+            bucket: bucket.to_string(),
+            root: "s3.amazonaws.com".to_string(),
+        }
+    }
+
+    pub fn new_with_root(region: &str, bucket: &str, root: &str) -> Self {
+        Self {
+            region: region.to_string(),
+            bucket: bucket.to_string(),
+            root: root.to_string(),
+        }
+    }
+
+    pub fn from_with_root(s: &str, root: &str) -> Self {
+        if s.contains(":") {
+            let mut parts = s.splitn(2, ':');
+            let region = parts.next().unwrap();
+            let bucket = parts.next().unwrap();
+            Self {
+                region: region.to_string(),
+                bucket: bucket.to_string(),
+                root: root.to_string(),
+            }
+        } else {
+            Self {
+                region: "us-east-1".to_string(),
+                bucket: s.to_string(),
+                root: root.to_string(),
+            }
         }
     }
 }
 
 impl From<&str> for Bucket {
     fn from(s: &str) -> Self {
-        if s.contains(":") {
-            let mut parts = s.splitn(2, ':');
-            let region = parts.next().unwrap();
-            let bucket = parts.next().unwrap();
-            Self {
-                region: region.into(),
-                bucket: bucket.into(),
-            }
-        } else {
-            Self {
-                region: "us-east-1".into(),
-                bucket: s.into(),
-            }
-        }
+        Bucket::from_with_root(s, "s3.amazonaws.com")
     }
 }
 
@@ -102,6 +120,7 @@ pub enum AddressingStyle {
 pub struct Presigner {
     credentials: Credentials,
     bucket: String,
+    root: String,
     region: String,
     endpoint: Url,
     addressing_style: AddressingStyle,
@@ -109,13 +128,22 @@ pub struct Presigner {
 
 impl Presigner {
     pub fn new(cred: Credentials, bucket: &str, region: &str) -> Self {
+        Self::new_with_root(cred, bucket, region, "s3.amazonaws.com")
+    }
+
+    pub fn new_with_root(cred: Credentials, bucket: &str, region: &str, root: &str) -> Self {
         Self {
             credentials: cred,
-            bucket: bucket.into(),
-            region: region.into(),
-            endpoint: Url::parse(&format!("https://{}.s3.amazonaws.com", bucket)).unwrap(),
+            bucket: bucket.to_string(),
+            root: root.to_string(),
+            region: region.to_string(),
+            endpoint: Url::parse(&format!("https://{}.{}", bucket, root)).unwrap(),
             addressing_style: AddressingStyle::Virtual,
         }
+    }
+
+    pub fn from_bucket(credentials: Credentials, bucket: &Bucket) -> Self {
+        Self::new_with_root(credentials, bucket.bucket.as_str(), bucket.region.as_str(), bucket.root.as_str())
     }
 
     /// Set the endpoint to use for presigned URLs, also enables path style
@@ -130,8 +158,8 @@ impl Presigner {
 
     pub fn use_path_style(&mut self) -> &mut Self {
         self.addressing_style = AddressingStyle::Path;
-        if self.endpoint == Url::parse(&format!("https://{}.s3.amazonaws.com", self.bucket)).unwrap() {
-            self.endpoint = Url::parse(&format!("https://s3.amazonaws.com/{}", self.bucket)).unwrap();
+        if self.endpoint == Url::parse(&format!("https://{}.{}", self.bucket, self.root)).unwrap() {
+            self.endpoint = Url::parse(&format!("https://{}/{}", self.root, self.bucket)).unwrap();
         }
         self
     }
@@ -236,7 +264,7 @@ impl Presigner {
 
 /// Generate a presigned GET URL for downloading
 pub fn get(credentials: &Credentials, bucket: &Bucket, key: &str, expires: i64) -> Option<String> {
-    let url = format!("https://{}.s3.amazonaws.com/{}", bucket.bucket, escape_key(key));
+    let url = format!("https://{}.{}/{}", bucket.bucket, bucket.root, escape_key(key));
     let now = Utc::now();
 
     presigned_url(
@@ -254,7 +282,7 @@ pub fn get(credentials: &Credentials, bucket: &Bucket, key: &str, expires: i64) 
 
 /// Generate a presigned PUT URL for uploading
 pub fn put(credentials: &Credentials, bucket: &Bucket, key: &str, expires: i64) -> Option<String> {
-    let url = format!("https://{}.s3.amazonaws.com/{}", bucket.bucket, escape_key(key));
+    let url = format!("https://{}.{}/{}", bucket.bucket, bucket.root, escape_key(key));
     /*let url = format!(
         "https://s3.amazonaws.com/{}/{}",
         bucket.bucket,
@@ -300,7 +328,7 @@ fn escape_key(key: &str) -> String {
         }
     }
     if encoded {
-        key.into() // assume esacped
+        key.to_string() // assume esacped
     } else {
         percent_encode(key.as_bytes(), &S3_KEY_PERCENT_ENCODING_CHARSET).to_string()
     }
@@ -400,6 +428,7 @@ pub fn presigned_url(
         signed_headers,
         payload_hash
     );
+
     let string_to_sign = string_to_sign(&date_time, &region, &canonical_request, service);
     let signing_key = signing_key(&date_time, secret_key, region, service)?;
 
@@ -461,14 +490,15 @@ mod tests {
     #[test]
     fn test_generate() {
         let credentials = Credentials {
-            access_key: "ASIAAAAAABBBBBCCCCCDDDDDD".into(),
-            secret_key: "AAAAAAA+BBBBBBBB/CCCCCCC/DDDDDDDDDD".into(),
-            session_token: Some("xxxxxxxxx".into()),
+            access_key: "ASIAAAAAABBBBBCCCCCDDDDDD".to_string(),
+            secret_key: "AAAAAAA+BBBBBBBB/CCCCCCC/DDDDDDDDDD".to_string(),
+            session_token: Some("xxxxxxxxx".to_string()),
         };
 
         let bucket = Bucket {
-            region: "us-east-1".into(),
-            bucket: "the-bucket".into(),
+            region: "us-east-1".to_string(),
+            bucket: "the-bucket".to_string(),
+            root: "s3.amazonaws.com".to_string(),
         };
 
         let s = put(
